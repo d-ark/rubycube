@@ -1,10 +1,10 @@
 @cubeColors = [
   0x006699 # blue
   0x33CC00 # green
-  0xE80000 #+ red
-  0xFF6600 #+ orange
-  0xFFFF00 #+ yellow
-  0xFFFFFF #+ white
+  0xE80000 # red
+  0xFF6600 # orange
+  0xFFFF00 # yellow
+  0xFFFFFF # white
   0x333333 # inner color
 ]
 
@@ -14,72 +14,113 @@ cubeSize = width/(2*height)
 
 rotations = [0, 0.5*Math.PI, Math.PI, 1.5*Math.PI]
 
-Cube = (x, y, z, colors, max_cube, odd)->
+XRotation = (p, r) -> p: [1,5,3,7,0,4,2,6][p], r: [0,1,2][r]
+
+YRotation = (p, r) -> p: [4,5,0,1,6,7,2,3][p], r: [0,1,2][r]
+
+ZRotation = (p, r) -> p: [1,3,0,2,5,7,4,6][p], r: [0,1,2][r]
+
+rotation_positions = [
+  [[1,1,1],[1,0,0],[0,0,3]],
+  [[0,0,0],[1,2,1],[1,1,0]],
+  [[0,2,2],[1,0,3],[0,1,3]],
+  [[0,1,0],[1,2,2],[0,2,1]],
+
+  [[0,0,2],[1,0,1],[0,3,3]],
+  [[0,3,0],[1,2,0],[0,0,1]],
+  [[0,3,2],[1,0,2],[0,2,3]],
+  [[0,2,0],[1,2,3],[0,3,1]]
+]
+
+Cube = (x, y, z, colors, min_cube, max_cube, odd)->
   @x = x
   @y = y
   @z = z
-  @rotationX = 0
-  @rotationY = 0
-  @rotationZ = 0
+  @colors = [0,1,2,3,4,5]
+  plus = if odd then 0 else -0.5*1.1
+  @matrix_data = [0,0,0]
 
-  @blinker = null
-
-  @blink = =>
-    xxx = 0
-    @blinker = setInterval( =>
-      if xxx
-        @cube.position.x += 10
-        @cube.position.y += 10
-        @cube.position.z += 10
-        xxx = 0
-        clearInterval @blinker
-      else
-        @cube.position.x -= 10
-        @cube.position.y -= 10
-        @cube.position.z -= 10
-        xxx = 1
-    , 1000)
+  @rotator = null
 
   @fix_rotations = =>
-    @cube.rotation.x = rotations[@rotationX]
-    @cube.rotation.y = rotations[@rotationY]
-    @cube.rotation.z = rotations[@rotationZ]
-    @rotationX
+    @cube.rotation.x = @cube.rotation.y = @cube.rotation.z = 0
+    @geometry.verticesNeedUpdate = true
+    @geometry.applyMatrix new THREE.Matrix4().makeTranslation(
+      (@x*1.1 + plus)*cubeSize - @matrix_data[0],
+      (@y*1.1 + plus)*cubeSize - @matrix_data[1],
+      (@z*1.1 + plus)*cubeSize - @matrix_data[2]
+    )
+    @matrix_data = [(@x*1.1 + plus)*cubeSize, (@y*1.1 + plus)*cubeSize, (@z*1.1 + plus)*cubeSize]
+    @geometry.verticesNeedUpdate = true
+    @cube.material.materials = @materials()
+    window.clearInterval(@rotator) if @rotator
+    @rotator = null
+
+  @perform_rotation = (axis, inverse, plus = 0.3) =>
+    do @fix_rotations if @rotator
+    koef = if inverse then -1 else 1
+    @rotator = setInterval =>
+      if Math.PI/2 - koef*@cube.rotation[axis] > plus
+        @cube.rotation[axis] += koef*plus
+      else
+        do @fix_rotations
+    , 100
+
 
   @rotateX = =>
-    @rotationX = (@rotationX + 1) % 4
     oy = @y
-    @y = max_cube - @z
+    @y = min_cube + (max_cube - @z)
     @z = oy
-    do @fix_rotations
+    @colors = [@colors[0], @colors[1], @colors[5], @colors[4], @colors[2], @colors[3]]
+    @perform_rotation 'x', false
 
   @rotateY = =>
-    @rotationY = (@rotationY + 1) % 4
-    ox = @x
-    @x = @z
-    @z = max_cube - ox
-    do @fix_rotations
+    oz = @z
+    @z = min_cube + (max_cube - @x)
+    @x = oz
+    @colors = [@colors[4], @colors[5], @colors[2], @colors[3], @colors[1], @colors[0]]
+    @perform_rotation 'y', false
 
   @rotateZ = =>
-    @rotationZ = (@rotationZ + 1) % 4
     oy = @y
     @y = @x
-    @x = max_cube - oy
-    do @fix_rotations
+    @x = min_cube + (max_cube - oy)
+    @colors = [@colors[3], @colors[2], @colors[0], @colors[1], @colors[4], @colors[5]]
+    @perform_rotation 'z', false
 
+  @rotateInverseX = =>
+    oy = @y
+    @y = @z
+    @z = min_cube + (max_cube - oy)
+    @colors = [@colors[0], @colors[1], @colors[4], @colors[5], @colors[3], @colors[2]]
+    @perform_rotation 'x', true
+
+  @rotateInverseY = =>
+    oz = @z
+    @z = @x
+    @x = min_cube + (max_cube - oz)
+    @colors = [@colors[5], @colors[4], @colors[2], @colors[3], @colors[0], @colors[1]]
+    @perform_rotation 'y', true
+
+  @rotateInverseZ = =>
+    oy = @y
+    @y = min_cube + (max_cube - @x)
+    @x = oy
+    @colors = [@colors[2], @colors[3], @colors[1], @colors[0], @colors[4], @colors[5]]
+    @perform_rotation 'z', true
 
   @geometry = new THREE.BoxGeometry cubeSize, cubeSize, cubeSize
-  plus = if odd then 0 else -0.5*1.1
-  @geometry.applyMatrix new THREE.Matrix4().makeTranslation (x*1.1 + plus)*cubeSize, (y*1.1 + plus)*cubeSize, (z*1.1 + plus)*cubeSize
-  @materials = [
-    new THREE.MeshBasicMaterial( { color: cubeColors[colors[0]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
-    new THREE.MeshBasicMaterial( { color: cubeColors[colors[1]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
-    new THREE.MeshBasicMaterial( { color: cubeColors[colors[2]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
-    new THREE.MeshBasicMaterial( { color: cubeColors[colors[3]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
-    new THREE.MeshBasicMaterial( { color: cubeColors[colors[4]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
-    new THREE.MeshBasicMaterial( { color: cubeColors[colors[5]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
-  ]
-  @cube = new THREE.Mesh @geometry, new THREE.MeshFaceMaterial @materials
+  @materials = ->
+    [
+      new THREE.MeshBasicMaterial( { color: cubeColors[colors[@colors[0]]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
+      new THREE.MeshBasicMaterial( { color: cubeColors[colors[@colors[1]]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
+      new THREE.MeshBasicMaterial( { color: cubeColors[colors[@colors[2]]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
+      new THREE.MeshBasicMaterial( { color: cubeColors[colors[@colors[3]]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
+      new THREE.MeshBasicMaterial( { color: cubeColors[colors[@colors[4]]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
+      new THREE.MeshBasicMaterial( { color: cubeColors[colors[@colors[5]]], specular: 0x009900, shininess: 30, shading: THREE.FlatShading } )
+    ]
+  @cube = new THREE.Mesh @geometry, new THREE.MeshFaceMaterial @materials()
+  do @fix_rotations
   @
 
 MainCube = (count, side, color)->
@@ -106,12 +147,12 @@ buildAxis = (src, dst, colorHex) ->
 
 buildAxes = (length)->
   axes = new THREE.Object3D()
-  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(length, 0, 0),  cubeColors[1]
-  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(-length, 0, 0), cubeColors[0]
-  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, length, 0),  cubeColors[3]
-  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -length, 0), cubeColors[2]
-  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, length),  cubeColors[5]
-  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -length), cubeColors[4]
+  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(length, 0, 0),  cubeColors[0]
+  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(-length, 0, 0), cubeColors[1]
+  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, length, 0),  cubeColors[2]
+  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -length, 0), cubeColors[3]
+  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, length),  cubeColors[4]
+  axes.add buildAxis new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -length), cubeColors[5]
   axes
 
 
@@ -126,65 +167,59 @@ cubesForNormalCube = (cubeSide)->
   if cubeSide > 2
     for i in [firstCube+1..lastCube-1]
       for j in [firstCube+1..lastCube-1]
-        cubes.push new Cube(i, j, firstCube, [6,6,6,6,6,5], lastCube, odd)
-        cubes.push new Cube(i, j, lastCube , [6,6,6,6,4,6], lastCube, odd)
-        cubes.push new Cube(i, firstCube, j, [6,6,6,3,6,6], lastCube, odd)
-        cubes.push new Cube(i, lastCube, j , [6,6,2,6,6,6], lastCube, odd)
-        cubes.push new Cube(firstCube, i, j, [6,1,6,6,6,6], lastCube, odd)
-        cubes.push new Cube(lastCube, i, j , [0,6,6,6,6,6], lastCube, odd)
+        cubes.push new Cube(i, j, firstCube, [6,6,6,6,6,5], firstCube, lastCube, odd)
+        cubes.push new Cube(i, j, lastCube , [6,6,6,6,4,6], firstCube, lastCube, odd)
+        cubes.push new Cube(i, firstCube, j, [6,6,6,3,6,6], firstCube, lastCube, odd)
+        cubes.push new Cube(i, lastCube, j , [6,6,2,6,6,6], firstCube, lastCube, odd)
+        cubes.push new Cube(firstCube, i, j, [6,1,6,6,6,6], firstCube, lastCube, odd)
+        cubes.push new Cube(lastCube, i, j , [0,6,6,6,6,6], firstCube, lastCube, odd)
 
     for i in [firstCube+1..lastCube-1]
-      cubes.push new Cube(i, firstCube, firstCube, [6,6,6,3,6,5], lastCube, odd)
-      cubes.push new Cube(i, firstCube, lastCube, [6,6,6,3,4,6], lastCube, odd)
-      cubes.push new Cube(i, lastCube, firstCube, [6,6,2,6,6,5], lastCube, odd)
-      cubes.push new Cube(i, lastCube, lastCube, [6,6,2,6,4,6], lastCube, odd)
+      cubes.push new Cube(i, firstCube, firstCube, [6,6,6,3,6,5], firstCube, lastCube, odd)
+      cubes.push new Cube(i, firstCube, lastCube, [6,6,6,3,4,6], firstCube, lastCube, odd)
+      cubes.push new Cube(i, lastCube, firstCube, [6,6,2,6,6,5], firstCube, lastCube, odd)
+      cubes.push new Cube(i, lastCube, lastCube, [6,6,2,6,4,6], firstCube, lastCube, odd)
 
-      cubes.push new Cube(firstCube, i, firstCube, [6,1,6,6,6,5], lastCube, odd)
-      cubes.push new Cube(firstCube, i, lastCube, [6,1,6,6,4,6], lastCube, odd)
-      cubes.push new Cube(lastCube, i, firstCube, [0,6,6,6,6,5], lastCube, odd)
-      cubes.push new Cube(lastCube, i, lastCube, [0,6,6,6,4,6], lastCube, odd)
+      cubes.push new Cube(firstCube, i, firstCube, [6,1,6,6,6,5], firstCube, lastCube, odd)
+      cubes.push new Cube(firstCube, i, lastCube, [6,1,6,6,4,6], firstCube, lastCube, odd)
+      cubes.push new Cube(lastCube, i, firstCube, [0,6,6,6,6,5], firstCube, lastCube, odd)
+      cubes.push new Cube(lastCube, i, lastCube, [0,6,6,6,4,6], firstCube, lastCube, odd)
 
-      cubes.push new Cube(firstCube, firstCube, i, [6,1,6,3,6,6], lastCube, odd)
-      cubes.push new Cube(firstCube, lastCube, i, [6,1,2,6,6,6], lastCube, odd)
-      cubes.push new Cube(lastCube, firstCube, i, [0,6,6,3,6,6], lastCube, odd)
-      cubes.push new Cube(lastCube, lastCube, i, [0,6,2,6,6,6], lastCube, odd)
+      cubes.push new Cube(firstCube, firstCube, i, [6,1,6,3,6,6], firstCube, lastCube, odd)
+      cubes.push new Cube(firstCube, lastCube, i, [6,1,2,6,6,6], firstCube, lastCube, odd)
+      cubes.push new Cube(lastCube, firstCube, i, [0,6,6,3,6,6], firstCube, lastCube, odd)
+      cubes.push new Cube(lastCube, lastCube, i, [0,6,2,6,6,6], firstCube, lastCube, odd)
 
-  cubes.push new Cube(firstCube, firstCube, firstCube, [6,1,6,3,6,5], lastCube, odd)
-  # cubes.push new Cube(firstCube, firstCube, lastCube,  [6,1,6,3,4,6], lastCube, odd)
-  # cubes.push new Cube(firstCube, lastCube, firstCube,  [6,1,2,6,6,5], lastCube, odd)
-  # cubes.push new Cube(firstCube, lastCube, lastCube,   [6,1,2,6,4,6], lastCube, odd)
-  # cubes.push new Cube(lastCube, firstCube, firstCube,  [0,6,6,3,6,5], lastCube, odd)
-  # cubes.push new Cube(lastCube, firstCube, lastCube,   [0,6,6,3,4,6], lastCube, odd)
-  # cubes.push new Cube(lastCube, lastCube, firstCube,   [0,6,2,6,6,5], lastCube, odd)
-  # cubes.push new Cube(lastCube, lastCube, lastCube,    [0,6,2,6,4,6], lastCube, odd)
+  cubes.push new Cube(firstCube, firstCube, firstCube, [6,1,6,3,6,5], firstCube, lastCube, odd)
+  cubes.push new Cube(firstCube, firstCube, lastCube,  [6,1,6,3,4,6], firstCube, lastCube, odd)
+  cubes.push new Cube(firstCube, lastCube, firstCube,  [6,1,2,6,6,5], firstCube, lastCube, odd)
+  cubes.push new Cube(firstCube, lastCube, lastCube,   [6,1,2,6,4,6], firstCube, lastCube, odd)
+  cubes.push new Cube(lastCube, firstCube, firstCube,  [0,6,6,3,6,5], firstCube, lastCube, odd)
+  cubes.push new Cube(lastCube, firstCube, lastCube,   [0,6,6,3,4,6], firstCube, lastCube, odd)
+  cubes.push new Cube(lastCube, lastCube, firstCube,   [0,6,2,6,6,5], firstCube, lastCube, odd)
+  cubes.push new Cube(lastCube, lastCube, lastCube,    [0,6,2,6,4,6], firstCube, lastCube, odd)
 
   # cubes.push new MainCube(cubeSide, cubeSize, cubeColors[6])
 
   cubes
 
 @rotateCubesX = (x)->
-  cc = window.cubes.filter((c)-> c.x == x)
-  cube.rotateX() for cube in cc
+  cube.rotateX() for cube in window.cubes.filter((c)-> c.x == x)
 
 @rotateCubesY = (y)->
-  cc = window.cubes.filter((c)-> c.y == y)
-
-  cube.rotateY() for cube in cc
+  cube.rotateY() for cube in window.cubes.filter((c)-> c.y == y)
 
 @rotateCubesZ = (z)->
-  cc = window.cubes.filter((c)-> c.z == z)
-  console.log cc.length
-  cube.rotateZ() for cube in cc
+  cube.rotateZ() for cube in window.cubes.filter((c)-> c.z == z)
 
-@blinkCubesX = (x)->
-  cube.blink() for cube in window.cubes.filter((c)-> c.x == x)
+@rotateInverseCubesX = (x)->
+  cube.rotateInverseX() for cube in window.cubes.filter((c)-> c.x == x)
 
-@YCubes = (y)-> window.cubes.filter((c)-> c.y == y)
-@blinkCubesY = (y)->
-  cube.blink() for cube in window.cubes.filter((c)-> c.y == y)
+@rotateInverseCubesY = (y)->
+  cube.rotateInverseY() for cube in window.cubes.filter((c)-> c.y == y)
 
-@blinkCubesZ = (z)->
-  cube.blink() for cube in window.cubes.filter((c)-> c.z == z)
+@rotateInverseCubesZ = (z)->
+  cube.rotateInverseZ() for cube in window.cubes.filter((c)-> c.z == z)
 
 $(document).on 'ready page:load', ->
   scene = new THREE.Scene();
@@ -195,7 +230,7 @@ $(document).on 'ready page:load', ->
   renderer.setSize( window.innerWidth, window.innerHeight );
   document.body.appendChild( renderer.domElement );
 
-  window.cubes = cubesForNormalCube(2)
+  window.cubes = cubesForNormalCube(7)
 
   scene.add( cube.cube ) for cube in cubes
 
@@ -211,6 +246,12 @@ $(document).on 'ready page:load', ->
   window.XRotationsOn =  false
   window.YRotationsOn =  false
   window.ZRotationsOn =  false
+
+  window.XCubeRotationsOn = false
+  window.YCubeRotationsOn = false
+  window.ZCubeRotationsOn = false
+
+
 
   f = true
 
@@ -233,9 +274,9 @@ $(document).on 'ready page:load', ->
 
     if f
       f = false
-      camera.rotateX(50*plus)
+      camera.rotateX(-50*plus)
       camera.rotateY(50*plus)
-      camera.rotateZ(50*plus)
+      camera.rotateZ(10*plus)
 
 
     camera.rotateX(plus) if window.XRotationsOn
@@ -251,7 +292,12 @@ $(document).on 'ready page:load', ->
     camera.position.y = - 20 * sinX * cosY
     camera.position.z = 20 * cosY * cosX
 
-
     renderer.render(scene, camera);
 
   render();
+
+
+@setCube = (x, y, z)->
+  cubes[0].cube.rotation.x = rotations[x]
+  cubes[0].cube.rotation.y = rotations[y]
+  cubes[0].cube.rotation.z = rotations[z]
